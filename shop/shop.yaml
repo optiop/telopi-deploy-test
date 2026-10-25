@@ -2,10 +2,7 @@
 # Healthy state: checkout's PAYMENTS_URL is on port 8080, where the payments
 # Service listens. Changing it to 8081 makes checkout crash-loop (its start-up
 # check of payments is refused), which is the planted fault used by the test.
-apiVersion: v1
-kind: Namespace
-metadata: {name: shop}
----
+# The shop namespace exists already; the Application's destination is it.
 apiVersion: v1
 kind: Service
 metadata: {name: payments, namespace: shop}
