@@ -1,0 +1,82 @@
+# A small shop for testing Telopi's deploy events. Safe to delete.
+# Healthy state: checkout's PAYMENTS_URL is on port 8080, where the payments
+# Service listens. Changing it to 8081 makes checkout crash-loop (its start-up
+# check of payments is refused), which is the planted fault used by the test.
+apiVersion: v1
+kind: Namespace
+metadata: {name: shop}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: payments, namespace: shop}
+spec:
+  selector: {app: payments}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: payments, namespace: shop, labels: {app: payments}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: payments}}
+  template:
+    metadata: {labels: {app: payments, version: "1.9.0"}}
+    spec:
+      containers:
+        - name: payments
+          image: busybox:1.37
+          command: ["sh", "-c", "mkdir -p /www && echo ok > /www/health && echo 'payments 1.9.0 listening on :8080' && exec httpd -f -v -p 8080 -h /www"]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: checkout, namespace: shop}
+spec:
+  selector: {app: checkout}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: shop
+  labels: {app: checkout}
+  annotations: {kubernetes.io/change-cause: "release checkout 2.4.1: move payment calls to the new payments client"}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: checkout}}
+  template:
+    metadata: {labels: {app: checkout, version: "2.4.1"}}
+    spec:
+      containers:
+        - name: checkout
+          image: busybox:1.37
+          env:
+            - {name: PAYMENTS_URL, value: "http://payments.shop.svc.cluster.local:8080"}
+            - {name: LOG_LEVEL, value: info}
+          command:
+            - sh
+            - -c
+            - |
+              echo "checkout 2.4.1 starting"
+              echo "payments client: $PAYMENTS_URL"
+              if ! wget -q -T 3 -O /dev/null "$PAYMENTS_URL/health"; then
+                echo "FATAL: payments is not reachable at $PAYMENTS_URL; refusing to take orders"
+                exit 1
+              fi
+              echo "checkout ready"; exec sleep 3600
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: frontend, namespace: shop, labels: {app: frontend}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: frontend}}
+  template:
+    metadata: {labels: {app: frontend, version: "5.2.0"}}
+    spec:
+      containers:
+        - name: frontend
+          image: busybox:1.37
+          command: ["sh", "-c", "echo 'frontend 5.2.0 serving'; exec sleep 3600"]
