@@ -50,7 +50,7 @@ spec:
         - name: checkout
           image: busybox:1.37
           env:
-            - {name: PAYMENTS_URL, value: "http://payments.shop.svc.cluster.local:8080"}
+            - {name: PAYMENTS_URL, value: "http://payments.shop.svc.cluster.local:8081"}
             - {name: LOG_LEVEL, value: info}
           command:
             - sh
